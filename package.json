@@ -1,0 +1,13 @@
+{
+  "name": "opencode-proxy-rotate",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "OpenCode plugin that rotates proxies when the opencode.ai API is rate limited.",
+  "exports": {
+    ".": "./index.js"
+  },
+  "dependencies": {
+    "undici": "^7.16.0"
+  }
+}

@@ -1,0 +1,41 @@
+{
+  // Turn the plugin off without removing it from OpenCode.
+  "enabled": true,
+
+  // Proxy list. Edit that file, or add lines to "proxies" below.
+  // Each line: host:port:user:pass
+  // Also accepts host:port, user:pass@host:port, and http://user:pass@host:port
+  "proxyFile": "C:\\Users\\ducar\\Downloads\\proxys.txt",
+  "proxies": [],
+
+  // Only these hosts fail over. Subdomains match too.
+  "hosts": ["opencode.ai"],
+
+  // HTTP statuses treated as a rate limit. The body is not read.
+  "statuses": [429],
+
+  // These statuses rotate only when the body contains an errorBodies string.
+  "peekStatuses": [400, 402, 403],
+  "errorBodies": ["rate limit", "freeusagelimiterror", "too many requests", "usage limit"],
+
+  // rotate: each rate limit uses the next proxy.
+  // sticky: keep the proxy that just worked until it is limited or dead.
+  "strategy": "rotate",
+
+  // Proxies to try for one request. Dead proxies are skipped until cooldown ends.
+  "maxRotations": 5,
+  "timeoutMs": 60000,
+  "deadCooldownMs": 180000,
+  "limitCooldownMs": 30000,
+
+  // URL and pace for /proxy-check.
+  "checkUrl": "https://opencode.ai/",
+  "checkTimeoutMs": 8000,
+  "checkConcurrency": 10,
+
+  // Keep the opencode provider on HTTP so the hook can see a 429. WebSocket traffic does not pass this hook.
+  "forceHttp": true,
+
+  // Append rotation lines, without passwords, to proxy-rotate.log next to the plugin.
+  "log": true
+}
