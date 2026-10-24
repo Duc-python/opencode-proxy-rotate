@@ -9,14 +9,10 @@ export const DEFAULTS = {
   statuses: [429],
   peekStatuses: [400, 402, 403],
   errorBodies: ["rate limit", "freeusagelimiterror", "too many requests", "usage limit"],
-  strategy: "rotate",
   maxRotations: 5,
   timeoutMs: 60_000,
   deadCooldownMs: 180_000,
   limitCooldownMs: 30_000,
-  checkUrl: "https://opencode.ai/",
-  checkTimeoutMs: 8_000,
-  checkConcurrency: 10,
   forceHttp: true,
   log: true,
 }
@@ -43,7 +39,6 @@ function asStringList(value, fallback) {
 
 export function normalizeSettings(raw) {
   const input = raw && typeof raw === "object" ? raw : {}
-  const strategy = input.strategy === "sticky" ? "sticky" : "rotate"
   return {
     enabled: input.enabled !== false,
     proxyFile: typeof input.proxyFile === "string" && input.proxyFile.trim() ? input.proxyFile.trim() : DEFAULTS.proxyFile,
@@ -52,14 +47,10 @@ export function normalizeSettings(raw) {
     statuses: asNumberList(input.statuses, DEFAULTS.statuses),
     peekStatuses: asNumberList(input.peekStatuses, DEFAULTS.peekStatuses),
     errorBodies: asStringList(input.errorBodies, DEFAULTS.errorBodies).map((item) => item.toLowerCase()),
-    strategy,
     maxRotations: asNumber(input.maxRotations, DEFAULTS.maxRotations, 1),
     timeoutMs: asNumber(input.timeoutMs, DEFAULTS.timeoutMs, 1000),
     deadCooldownMs: asNumber(input.deadCooldownMs, DEFAULTS.deadCooldownMs, 0),
     limitCooldownMs: asNumber(input.limitCooldownMs, DEFAULTS.limitCooldownMs, 0),
-    checkUrl: typeof input.checkUrl === "string" && input.checkUrl.trim() ? input.checkUrl.trim() : DEFAULTS.checkUrl,
-    checkTimeoutMs: asNumber(input.checkTimeoutMs, DEFAULTS.checkTimeoutMs, 500),
-    checkConcurrency: asNumber(input.checkConcurrency, DEFAULTS.checkConcurrency, 1),
     forceHttp: input.forceHttp !== false,
     log: input.log !== false,
   }

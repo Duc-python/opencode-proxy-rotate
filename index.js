@@ -10,7 +10,7 @@ const plugin = {
   async setup(ctx) {
     service.setOptions(ctx.options)
     const settings = service.current()
-    service.log(`loaded ${settings.proxies.length} proxies, strategy ${settings.strategy}`)
+    service.log(`loaded ${settings.proxies.length} proxies`)
 
     if (settings.forceHttp) {
       try {
@@ -41,15 +41,6 @@ const plugin = {
 
     await ctx.command.transform((editor) => {
       editor.add({
-        name: "proxy-check",
-        description: "Check which proxies are live. Example: /proxy-check 10",
-        execute: async ({ sessionID, prompt }) => {
-          const limit = Number(String(prompt?.text ?? "").trim())
-          const report = await service.check({ limit: Number.isFinite(limit) && limit > 0 ? limit : 0 })
-          await ctx.session.synthetic({ sessionID, text: report })
-        },
-      })
-      editor.add({
         name: "proxy-status",
         description: "Show the rotation state and the proxy file in use",
         execute: async ({ sessionID }) => {
@@ -69,31 +60,11 @@ const plugin = {
     await ctx.tool.transform((editor) => {
       editor.namespace({
         name: "proxy",
-        description: "Check proxies and inspect rotation for opencode.ai",
-      })
-      editor.add({
-        name: "check",
-        description: "Check whether listed proxies can open an HTTPS connection to opencode.ai. Does not return passwords.",
-        input: {
-          type: "object",
-          properties: {
-            limit: { type: "number", description: "Check only the first N proxies. Omit to check the full list." },
-            timeoutMs: { type: "number" },
-            url: { type: "string" },
-          },
-          additionalProperties: false,
-        },
-        options: { namespace: "proxy" },
-        execute: async (input, context) => {
-          const report = await service.check(input ?? {}, async (done, total) => {
-            await context.progress({ status: `checking ${done}/${total}` })
-          })
-          return { content: report }
-        },
+        description: "Inspect proxy rotation for opencode.ai",
       })
       editor.add({
         name: "status",
-        description: "Show the rotation strategy, how many proxies are ready, and the settings file path.",
+        description: "Show which proxy is active, how many are skipped, and the settings file path.",
         input: { type: "object", properties: {}, additionalProperties: false },
         options: { namespace: "proxy" },
         execute: async () => ({ content: service.status() }),
@@ -120,12 +91,3 @@ const plugin = {
 }
 
 export default plugin
-
-const isCli = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)
-if (isCli && process.argv.includes("--check")) {
-  const limitFlag = process.argv.indexOf("--limit")
-  const limit = limitFlag >= 0 ? Number(process.argv[limitFlag + 1]) : 0
-  const report = await service.check({ limit })
-  console.log(report)
-  await service.close()
-}

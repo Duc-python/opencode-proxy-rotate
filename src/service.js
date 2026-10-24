@@ -1,6 +1,5 @@
 import fs from "node:fs"
 import path from "node:path"
-import { checkProxies, formatReport } from "./check.js"
 import { failover } from "./failover.js"
 import { createHttp } from "./http.js"
 import { createPool } from "./pool.js"
@@ -8,12 +7,11 @@ import { loadProxyText } from "./proxies.js"
 import { readSettings, settingsPath, watchKey, writeProxyFileSetting } from "./settings.js"
 
 export function createService(root) {
-  const pool = createPool()
+  const pool = createPool(path.join(root, "proxy-health.json"))
   const http = createHttp()
   let options = {}
   let cache = null
   const logFile = path.join(root, "proxy-rotate.log")
-  const reportFile = path.join(root, "proxy-check-report.json")
 
   function log(message) {
     const line = `${new Date().toISOString()} ${message}`
@@ -47,10 +45,6 @@ export function createService(root) {
     return resolved
   }
 
-  async function probe(url, proxy, timeoutMs) {
-    return http.fetch(url, new Request(url, { method: "GET" }), proxy, timeoutMs)
-  }
-
   return {
     log,
 
@@ -66,39 +60,13 @@ export function createService(root) {
       return failover(request, response, settings, pool, http, settings.log ? log : () => {})
     },
 
-    async check(extra = {}, onProgress) {
-      const settings = current()
-      if (settings.proxies.length === 0) {
-        return `No proxies loaded. Set proxyFile or the proxies list in ${settingsPath(root, options)}`
-      }
-      const url = extra.url || settings.checkUrl
-      const results = await checkProxies(settings.proxies, {
-        url,
-        timeoutMs: extra.timeoutMs || settings.checkTimeoutMs,
-        concurrency: settings.checkConcurrency,
-        limit: Number(extra.limit) || 0,
-        fetch: probe,
-        onProgress,
-      })
-      const report = formatReport(results, url)
-      const safe = results.map(({ id, ok, status, ms, error }) => ({ id, ok, status, ms, error }))
-      try {
-        fs.writeFileSync(reportFile, JSON.stringify({ at: new Date().toISOString(), url, results: safe }, null, 2))
-      } catch {
-        // The report is still returned to the session when the file cannot be written.
-      }
-      return report
-    },
-
     status() {
       const settings = current()
       const snap = pool.snapshot(settings.proxies)
       return [
         `enabled: ${settings.enabled}`,
-        `strategy: ${settings.strategy}`,
-        `proxies: ${snap.total} (${snap.ready} ready, ${snap.cooling} cooling down)`,
-        `cursor: ${snap.cursor}`,
-        `sticky: ${snap.sticky ?? "none"}`,
+        `proxies: ${snap.total} (${snap.ready} ready, ${snap.cooling} skipped)`,
+        `active: ${snap.sticky ?? "none"}`,
         `file: ${settings.proxyFile}`,
         `hosts: ${settings.hosts.join(", ")}`,
         `maxRotations: ${settings.maxRotations}`,

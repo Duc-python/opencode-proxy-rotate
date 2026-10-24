@@ -4,7 +4,6 @@ import os from "node:os"
 import path from "node:path"
 import test from "node:test"
 import { createService } from "./service.js"
-import { checkProxies, formatReport } from "./check.js"
 import { failover } from "./failover.js"
 import { createPool } from "./pool.js"
 import { loadProxyText, matchesHost, parseProxyLine, proxyUrl, scrub } from "./proxies.js"
@@ -27,38 +26,25 @@ test("parse url form and skip comments", () => {
   assert.equal(list[1].host, "host.test")
 })
 
-test("settings keep https urls and comments", () => {
+test("settings keep comments and ignore removed check options", () => {
   const settings = normalizeSettings(parseJsonc(`{
     // file
     "checkUrl": "https://opencode.ai/",
-    "strategy": "sticky",
     "maxRotations": 2,
   }`))
-  assert.equal(settings.checkUrl, "https://opencode.ai/")
-  assert.equal(settings.strategy, "sticky")
   assert.equal(settings.maxRotations, 2)
   assert.equal(settings.hosts[0], "opencode.ai")
+  assert.equal(settings.checkUrl, undefined)
 })
 
-test("rotate starts at the next proxy after each rate limit", () => {
+test("a working proxy stays first and a skipped proxy is not retried", () => {
   const pool = createPool()
   const proxies = loadProxyText("a.test:1:u:p\nb.test:1:u:p\nc.test:1:u:p")
-  const first = pool.take(proxies, 2, "rotate")
-  const second = pool.take(proxies, 1, "rotate")
-  assert.deepEqual(first.map((item) => item.host), ["a.test", "b.test"])
-  assert.equal(second[0].host, "b.test")
-})
-
-test("sticky retries the proxy that just worked", () => {
-  const pool = createPool()
-  const proxies = loadProxyText("a.test:1:u:p\nb.test:1:u:p")
-  const [first] = pool.take(proxies, 1, "sticky")
-  pool.succeed(first, "sticky")
-  const [again] = pool.take(proxies, 1, "sticky")
-  assert.equal(again.host, "a.test")
-  pool.cool(again, 60_000)
-  const [next] = pool.take(proxies, 1, "sticky", Date.now())
-  assert.equal(next.host, "b.test")
+  const [first] = pool.take(proxies, 1)
+  pool.succeed(first, proxies)
+  assert.deepEqual(pool.take(proxies, 2).map((item) => item.host), ["a.test", "b.test"])
+  pool.cool(first, 60_000, proxies)
+  assert.equal(pool.take(proxies, 1)[0].host, "b.test")
 })
 
 test("failover replays a 429 through the next live proxy and leaves other hosts alone", async () => {
@@ -73,7 +59,7 @@ test("failover replays a 429 through the next live proxy and leaves other hosts 
     },
   }
   const settings = {
-    ...normalizeSettings({ maxRotations: 2, strategy: "rotate" }),
+    ...normalizeSettings({ maxRotations: 2 }),
     proxies,
   }
   const logs = []
@@ -121,22 +107,11 @@ test("a 403 body that names the usage limit rotates too", async () => {
   assert.equal(replaced.status, 200)
 })
 
-test("check report hides credentials", async () => {
-  const proxies = loadProxyText("edge.example:8080:alice:super-secret")
-  const results = await checkProxies(proxies, {
-    url: "https://opencode.ai/",
-    timeoutMs: 1000,
-    concurrency: 1,
-    limit: 0,
-    fetch: async () => {
-      throw new Error("tunnel failed for alice:super-secret@edge.example")
-    },
-  })
-  const report = formatReport(results, "https://opencode.ai/")
-  assert.equal(report.includes("super-secret"), false)
-  assert.equal(report.includes("alice"), false)
-  assert.equal(scrub("alice super-secret", proxies[0]).includes("super-secret"), false)
-  assert.match(report, /via https:\/\/opencode.ai\//)
+test("scrub removes proxy credentials", () => {
+  const [proxy] = loadProxyText("edge.example:8080:alice:super-secret")
+  const text = scrub("tunnel failed for alice:super-secret@edge.example", proxy)
+  assert.equal(text.includes("super-secret"), false)
+  assert.equal(text.includes("alice"), false)
 })
 
 test("proxy-file saves the path and keeps the rest of settings", () => {

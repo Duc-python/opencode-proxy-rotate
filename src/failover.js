@@ -45,7 +45,7 @@ export async function failover(request, response, settings, pool, http, log) {
   if (!matchesHost(request.url, settings.hosts)) return response
   if (!(await isRateLimited(response, settings))) return response
 
-  const batch = pool.take(settings.proxies, settings.maxRotations, settings.strategy)
+  const batch = pool.take(settings.proxies, settings.maxRotations)
   if (batch.length === 0) {
     log(`rate limit ${response.status} ${hostOf(request.url)} and no proxy is ready`)
     return response
@@ -58,21 +58,21 @@ export async function failover(request, response, settings, pool, http, log) {
     try {
       const replayed = await http.fetch(request.url, request, proxy, settings.timeoutMs)
       if (replayed.status === 407) {
-        pool.cool(proxy, settings.deadCooldownMs)
+        pool.cool(proxy, settings.deadCooldownMs, settings.proxies)
         log(`DEAD ${proxy.id} HTTP 407`)
         continue
       }
       if (await isRateLimited(replayed, settings)) {
-        pool.cool(proxy, settings.limitCooldownMs)
+        pool.cool(proxy, settings.limitCooldownMs, settings.proxies)
         log(`LIMIT ${proxy.id} HTTP ${replayed.status} ${Date.now() - started}ms`)
         last = replayed
         continue
       }
-      pool.succeed(proxy, settings.strategy)
+      pool.succeed(proxy, settings.proxies)
       log(`OK ${proxy.id} HTTP ${replayed.status} ${Date.now() - started}ms`)
       return replayed
     } catch (error) {
-      pool.cool(proxy, settings.deadCooldownMs)
+      pool.cool(proxy, settings.deadCooldownMs, settings.proxies)
       log(`DEAD ${proxy.id} ${scrub(errorText(error), proxy)}`)
     }
   }
